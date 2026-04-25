@@ -1,12 +1,85 @@
-- file:
+- name: Install Nginx
+  apt:
+    name: nginx
+    state: present
+  when: server_type == "nginx"
+
+- name: Start Nginx
+  systemd:
+    name: nginx
+    state: started
+    enabled: yes
+  when: server_type == "nginx"
+
+- name: Install Apache
+  apt:
+    name: apache2
+    state: present
+  when: server_type == "apache"
+
+- name: Start Apache
+  systemd:
+    name: apache2
+    state: started
+    enabled: yes
+  when: server_type == "apache"
+
+- name: Create web root directory
+  file:
     path: "/var/www/{{ domain }}/current"
     state: directory
     recurse: yes
+    owner: www-data
+    group: www-data
 
-- copy:
+- name: Create Nginx virtual host config
+  template:
+    src: nginx_vhost.conf.j2
+    dest: "/etc/nginx/sites-available/{{ domain }}"
+  when: server_type == "nginx"
+  notify: Reload Nginx
+
+- name: Enable Nginx site
+  file:
+    src: "/etc/nginx/sites-available/{{ domain }}"
+    dest: "/etc/nginx/sites-enabled/{{ domain }}"
+    state: link
+  when: server_type == "nginx"
+  notify: Reload Nginx
+
+- name: Create Apache virtual host config
+  template:
+    src: apache_vhost.conf.j2
+    dest: "/etc/apache2/sites-available/{{ domain }}.conf"
+  when: server_type == "apache"
+  notify: Reload Apache
+
+- name: Enable Apache site
+  command: a2ensite {{ domain }}
+  when: server_type == "apache"
+  notify: Reload Apache
+
+- name: Create OpenLiteSpeed virtual host config
+  copy:
     dest: "/usr/local/lsws/conf/vhosts/{{ domain }}.conf"
     content: |
-      docRoot /var/www/{{ domain }}/current
-      vhDomain {{ domain }}
-      vhAliases www.{{ domain }}
+      docRoot                   /var/www/{{ domain }}/current
+      vhDomain                  {{ domain }}
+      vhAliases                 www.{{ domain }}
+      adminEmails               admin@{{ domain }}
+      enableGzip                1
+      enableBrCompression       1
+      indexFiles                index.php, index.html
+      errorLog                  /usr/local/lsws/logs/{{ domain }}.error_log
+      accessLog                 /usr/local/lsws/logs/{{ domain }}.access_log
+      vhssl                     1
+      ssl_certFile              /usr/local/lsws/ssl/{{ domain }}.crt
+      ssl_keyFile               /usr/local/lsws/ssl/{{ domain }}.key
+  when: server_type == "ols"
+  notify: Reload LiteSpeed
+
+- name: Create log directories for OLS
+  file:
+    path: "/usr/local/lsws/logs/{{ domain }}"
+    state: directory
   when: server_type == "ols"

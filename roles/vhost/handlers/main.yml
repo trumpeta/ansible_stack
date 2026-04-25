@@ -1,0 +1,15 @@
+---
+- name: Reload Nginx
+  systemd:
+    name: nginx
+    state: reloaded
+
+- name: Reload Apache
+  systemd:
+    name: apache2
+    state: reloaded
+
+- name: Reload LiteSpeed
+  systemd:
+    name: lsws
+    state: reloaded

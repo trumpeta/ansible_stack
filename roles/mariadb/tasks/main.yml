@@ -6,3 +6,29 @@
     name: mariadb
     state: started
     enabled: yes
+
+- name: Secure MariaDB installation
+  mysql_secure_installation:
+    login_password: ''
+    root_password: "{{ db_pass }}"
+    user: root
+    login_host: localhost
+  when: db_pass != ''
+
+- name: Create database
+  mysql_db:
+    name: "{{ db_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ db_pass }}"
+  when: db_name != ''
+
+- name: Create database user
+  mysql_user:
+    name: "{{ db_user }}"
+    password: "{{ db_pass }}"
+    priv: "{{ db_name }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ db_pass }}"
+  when: db_user != '' and db_pass != ''
