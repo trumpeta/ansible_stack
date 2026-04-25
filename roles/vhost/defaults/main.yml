@@ -1,5 +1,13 @@
 # Virtual host defaults
 vhost_webroot_base: /var/www
+vhost_site_root: "{{ vhost_webroot_base }}/{{ domain }}"
+vhost_current_path: "{{ vhost_site_root }}/current"
+vhost_document_root_dirname: document_root
+vhost_document_root: "{{ vhost_current_path }}/{{ vhost_document_root_dirname }}"
 vhost_webroot_owner: www-data
 vhost_webroot_group: www-data
-vhost_webroot_mode: "0750"
+vhost_site_root_mode: "0755"
+vhost_current_mode: "0755"
+vhost_webroot_mode: "0755"
+vhost_file_mode: "0644"
+vhost_private_file_mode: "0640"

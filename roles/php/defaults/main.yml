@@ -1,74 +1,86 @@
-# PHP defaults - Multi-version support (4 latest minors)
-# All available PHP versions (latest patches for each minor)
+# PHP defaults - multi-version support driven by interactive_full.yml
 php_versions_all:
   "82":
     label: "PHP 8.2.30"
     version: "8.2"
     patch: "30"
+    major_minor_compact: "82"
+    fpm_service: "php8.2-fpm"
+    fpm_socket: "/run/php/php8.2-fpm.sock"
   "83":
     label: "PHP 8.3.30"
     version: "8.3"
     patch: "30"
+    major_minor_compact: "83"
+    fpm_service: "php8.3-fpm"
+    fpm_socket: "/run/php/php8.3-fpm.sock"
   "84":
     label: "PHP 8.4.20"
     version: "8.4"
     patch: "20"
+    major_minor_compact: "84"
+    fpm_service: "php8.4-fpm"
+    fpm_socket: "/run/php/php8.4-fpm.sock"
   "85":
     label: "PHP 8.5.5"
     version: "8.5"
     patch: "5"
+    major_minor_compact: "85"
+    fpm_service: "php8.5-fpm"
+    fpm_socket: "/run/php/php8.5-fpm.sock"
 
 # Active version selected by user (from interactive_full.yml)
-php_active: "85"                    # Active version (82/83/84/85)
-
-# Computed variables for active version
+php_active: "85"
 php_active_version: "{{ php_versions_all[php_active].version }}"
-php_active_patch: "{{ php_versions_all[php_active].patch }}"
+php_active_patch: "{{ php_versions_all[php_active].patch | default('') }}"
 php_active_label: "{{ php_versions_all[php_active].label }}"
+php_active_fpm_service: "{{ php_versions_all[php_active].fpm_service | default('php' ~ php_active_version ~ '-fpm') }}"
+php_active_fpm_socket: "{{ php_versions_all[php_active].fpm_socket | default('/run/php/php' ~ php_active_version ~ '-fpm.sock') }}"
 
-# Common packages for all PHP versions (shared extensions)
+# Install only package-level modules that are expected to exist in both
+# the LiteSpeed and Debian/Ubuntu PHP repositories.
 php_common_extensions:
+  - common
   - mysql
   - redis
   - opcache
   - memcached
   - curl
   - gd
-  - json
-  - cli
   - mbstring
   - xml
   - zip
   - intl
   - bcmath
   - soap
-  - pdo
-  - pdo_mysql
-  - mysqli
-  - pdo_pgsql
   - pgsql
   - sqlite3
-  - pdo_sqlite
-  - exif
-  - pcntl
-  - sockets
-  - tokenizer
-  - fileinfo
-  - ftp
-  - gettext
-  - iconv
-  - phar
-  - posix
-  - shmop
-  - sysvmsg
-  - sysvsem
-  - sysvshm
 
-# OLS packages - install all 4 versions
+php_ini_settings:
+  max_execution_time: "300"
+  max_input_time: "300"
+  max_input_vars: "20000"
+  memory_limit: "512M"
+  post_max_size: "256M"
+  upload_max_filesize: "256M"
+  date.timezone: "Europe/Prague"
+  opcache.enable: "1"
+  opcache.memory_consumption: "256"
+  opcache.interned_strings_buffer: "16"
+  opcache.max_accelerated_files: "10000"
+  opcache.validate_timestamps: "1"
+  opcache.revalidate_freq: "0"
+  opcache.enable_cli: "1"
+  realpath_cache_size: "4096K"
+  realpath_cache_ttl: "600"
+
+php_package_retries: 3
+php_package_delay: 10
+
 php_ols_all_packages: |
   {% set packages = [] %}
-  {% for version_key, version_info in php_versions_all.items() %}
-    {% set version_short = version_key %}
+  {% for version_info in php_versions_all.values() %}
+    {% set version_short = version_info.major_minor_compact | default(version_info.version | replace('.', '')) %}
     {% set _ = packages.append('lsphp' + version_short) %}
     {% for ext in php_common_extensions %}
       {% set _ = packages.append('lsphp' + version_short + '-' + ext) %}
@@ -76,16 +88,23 @@ php_ols_all_packages: |
   {% endfor %}
   {{ packages | unique | list }}
 
-# Nginx packages - install all 4 versions with FPM
-php_nginx_all_packages: |
+# Debian/Ubuntu packages - install all versions with FPM and CLI
+php_fpm_all_packages: |
   {% set packages = [] %}
-  {% for version_key, version_info in php_versions_all.items() %}
-    {% set version_short = version_key %}
-    {% set _ = packages.append('php' + version_short + '-fpm') %}
+  {% for version_info in php_versions_all.values() %}
+    {% set version = version_info.version %}
+    {% set _ = packages.append('php' + version + '-cli') %}
+    {% set _ = packages.append('php' + version + '-fpm') %}
     {% for ext in php_common_extensions %}
-      {% set _ = packages.append('php' + version_short + '-' + ext) %}
+      {% set _ = packages.append('php' + version + '-' + ext) %}
     {% endfor %}
   {% endfor %}
   {{ packages | unique | list }}
+
+php_sury_keyring_path: /etc/apt/keyrings/php-sury.gpg
+php_sury_repository: "deb [signed-by={{ php_sury_keyring_path }}] https://packages.sury.org/php/ {{ ansible_distribution_release }} main"
+php_supported_distributions:
+  - Debian
+  - Ubuntu
 
 php_enabled: yes

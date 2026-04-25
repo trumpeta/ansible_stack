@@ -1,17 +1,42 @@
+---
 - name: Install certbot
-  apt:
+  ansible.builtin.apt:
     name: certbot
     state: present
+    update_cache: yes
+    cache_valid_time: 3600
+    lock_timeout: 180
 
 - name: Check if SSL certificate already exists
   ansible.builtin.stat:
     path: "/etc/letsencrypt/live/{{ domain }}/fullchain.pem"
   register: ssl_cert_stat
 
-- name: Generate SSL certificate with certbot (skip if exists)
-  command: >
-    certbot certonly --standalone
-    -d {{ domain }} -d www.{{ domain }}
-    --non-interactive --agree-tos
-    -m {{ certbot_email_default }}
+- name: Obtain SSL certificate with certbot webroot mode
   when: not ssl_cert_stat.stat.exists
+  block:
+    - name: Ensure webroot exists before certbot validation
+      ansible.builtin.file:
+        path: "{{ wp_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Generate SSL certificate with certbot
+      ansible.builtin.command: >
+        certbot certonly --webroot
+        --webroot-path {{ wp_root }}
+        -d {{ domain }} -d www.{{ domain }}
+        --non-interactive --agree-tos
+        -m {{ certbot_email_default }}
+      register: certbot_issue
+      changed_when: certbot_issue.rc == 0
+
+    - name: Reload web server after certificate issuance
+      ansible.builtin.systemd:
+        name: "{{ 'nginx' if server_type == 'nginx' else 'apache2' if server_type == 'apache' else 'lshttpd' }}"
+        state: restarted
+
+  rescue:
+    - name: Fail with certificate issuance guidance
+      ansible.builtin.fail:
+        msg: "Certbot webroot validation failed. Verify that DNS already points to this server and that HTTP for {{ domain }} resolves to {{ wp_root }}."

@@ -1,18 +1,50 @@
-- shell: wget -O - https://repo.litespeed.sh | bash
-  args:
-    creates: /etc/apt/sources.list.d/lst_debian_repo.list
+---
+- name: Install OpenLiteSpeed repository and server
   when: server_type == "ols"
+  block:
+    - name: Install LiteSpeed repository prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - wget
+          - gnupg
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+        lock_timeout: 180
 
-- apt:
-    update_cache: yes
+    - name: Check whether LiteSpeed repository file already exists
+      ansible.builtin.stat:
+        path: "{{ litespeed_repo_list }}"
+      register: litespeed_repo_stat
 
-- apt:
-    name: openlitespeed
-    state: present
-  when: server_type == "ols"
+    - name: Download LiteSpeed repository bootstrap script
+      ansible.builtin.get_url:
+        url: https://repo.litespeed.sh
+        dest: /tmp/litespeed-repo.sh
+        mode: "0755"
+      when: not litespeed_repo_stat.stat.exists
 
-- systemd:
-    name: lshttpd
-    state: started
-    enabled: yes
-  when: server_type == "ols"
+    - name: Configure LiteSpeed repository
+      ansible.builtin.command: /bin/bash /tmp/litespeed-repo.sh
+      args:
+        creates: "{{ litespeed_repo_list }}"
+
+    - name: Install OpenLiteSpeed
+      ansible.builtin.apt:
+        name: openlitespeed
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+        lock_timeout: 180
+
+    - name: Ensure OpenLiteSpeed is enabled and running
+      ansible.builtin.systemd:
+        name: "{{ litespeed_service_name }}"
+        state: started
+        enabled: yes
+
+  rescue:
+    - name: Fail with LiteSpeed installation guidance
+      ansible.builtin.fail:
+        msg: "Unable to install or start OpenLiteSpeed from the official LiteSpeed repository."

@@ -5,7 +5,7 @@
   vars_prompt:
     - { name: domain, prompt: "Domain", private: no }
     - { name: server_type, prompt: "Server type (ols/nginx/apache)", private: no }
-    - { name: php_version, prompt: "PHP version (82/83/84/85)", private: no, default: "85" }
+    - { name: php_version, prompt: "Preferred active PHP version (major-minor, e.g. 85 or 8.5)", private: no, default: "85" }
     - { name: db_name, prompt: "Database name", private: no }
     - { name: db_user, prompt: "Database user", private: no }
     - { name: db_pass, prompt: "Database password", private: yes }
@@ -14,35 +14,140 @@
   vars:
     deploy_app_enabled: false
     db_host: localhost
-    wp_root: "/var/www/{{ domain }}/current"
-
-    # Available PHP versions (latest patches for each minor)
-    php_versions_available:
+    vhost_current_path: "/var/www/{{ domain }}/current"
+    vhost_document_root_dirname: "document_root"
+    vhost_document_root: "{{ vhost_current_path }}/{{ vhost_document_root_dirname }}"
+    wp_root: "{{ vhost_document_root }}"
+    php_release_catalog_url: "https://www.php.net/releases/index.php?json=1&version=8&max=100"
+    php_version_branches_count: 4
+    php_versions_fallback:
       "82":
         label: "PHP 8.2.30"
         version: "8.2"
         patch: "30"
+        major_minor_compact: "82"
+        fpm_service: "php8.2-fpm"
+        fpm_socket: "/run/php/php8.2-fpm.sock"
       "83":
         label: "PHP 8.3.30"
         version: "8.3"
         patch: "30"
+        major_minor_compact: "83"
+        fpm_service: "php8.3-fpm"
+        fpm_socket: "/run/php/php8.3-fpm.sock"
       "84":
         label: "PHP 8.4.20"
         version: "8.4"
         patch: "20"
+        major_minor_compact: "84"
+        fpm_service: "php8.4-fpm"
+        fpm_socket: "/run/php/php8.4-fpm.sock"
       "85":
         label: "PHP 8.5.5"
         version: "8.5"
         patch: "5"
+        major_minor_compact: "85"
+        fpm_service: "php8.5-fpm"
+        fpm_socket: "/run/php/php8.5-fpm.sock"
 
   pre_tasks:
+    - name: Validate supported operating system family
+      ansible.builtin.assert:
+        that:
+          - ansible_os_family == "Debian"
+          - ansible_distribution in ["Debian", "Ubuntu"]
+        fail_msg: "This playbook currently targets Debian/Ubuntu systems."
+
     - name: Normalize interactive values
       ansible.builtin.set_fact:
         server_type_normalized: "{{ server_type | lower | trim }}"
-        php_version_normalized: "{{ php_version | trim }}"
+        php_version_normalized: "{{ php_version | trim | regex_replace('[^0-9]', '') }}"
         db_name_normalized: "{{ db_name | trim }}"
         db_user_normalized: "{{ db_user | trim }}"
         wp_prefix_normalized: "{{ wp_prefix | trim }}"
+
+    - name: Resolve supported PHP release branches from php.net
+      block:
+        - name: Fetch official PHP release catalog
+          ansible.builtin.uri:
+            url: "{{ php_release_catalog_url }}"
+            method: GET
+            return_content: true
+            status_code: 200
+            timeout: 15
+          delegate_to: localhost
+          become: false
+          register: php_release_catalog_raw
+
+        - name: Parse official PHP release catalog
+          ansible.builtin.set_fact:
+            php_release_catalog: "{{ php_release_catalog_raw.content | from_json }}"
+
+        - name: Initialize sortable PHP release metadata
+          ansible.builtin.set_fact:
+            php_release_versions: []
+            php_selected_releases: []
+            php_versions_available: {}
+            php_version_source: "php.net"
+
+        - name: Build sortable PHP release metadata
+          ansible.builtin.set_fact:
+            php_release_versions: "{{ php_release_versions + [release_entry] }}"
+          vars:
+            version_parts: "{{ item.key.split('.') }}"
+            release_entry:
+              version_full: "{{ item.key }}"
+              major: "{{ version_parts[0] | int }}"
+              minor: "{{ version_parts[1] | int }}"
+              patch: "{{ version_parts[2] | int }}"
+              branch: "{{ (version_parts[0] | int | string) ~ '.' ~ (version_parts[1] | int | string) }}"
+              branch_key: "{{ (version_parts[0] | int | string) ~ (version_parts[1] | int | string) }}"
+              sort_weight: "{{ (version_parts[0] | int * 1000000) + (version_parts[1] | int * 1000) + (version_parts[2] | int) }}"
+          loop: "{{ php_release_catalog | dict2items }}"
+          when: item.key is match('^[0-9]+\\.[0-9]+\\.[0-9]+$')
+
+        - name: Sort PHP releases and select newest supported branches
+          ansible.builtin.set_fact:
+            php_release_versions_sorted: "{{ php_release_versions | sort(attribute='sort_weight', reverse=true) }}"
+            php_latest_branch_keys: "{{ (php_release_versions | sort(attribute='sort_weight', reverse=true) | map(attribute='branch_key') | unique | list)[:php_version_branches_count] }}"
+
+        - name: Ensure enough PHP branches were discovered
+          ansible.builtin.assert:
+            that:
+              - php_latest_branch_keys | length >= php_version_branches_count
+            fail_msg: "Unable to determine {{ php_version_branches_count }} supported PHP branches from php.net."
+
+        - name: Select latest patch release for each supported branch
+          ansible.builtin.set_fact:
+            php_selected_releases: "{{ php_selected_releases + [(php_release_versions_sorted | selectattr('branch_key', 'equalto', item) | list | first)] }}"
+          loop: "{{ php_latest_branch_keys }}"
+
+        - name: Build PHP version map from discovered releases
+          ansible.builtin.set_fact:
+            php_versions_available: "{{ php_versions_available | combine({ item.branch_key: php_version_entry }) }}"
+          vars:
+            php_version_entry:
+              label: "PHP {{ item.version_full }}"
+              version: "{{ item.branch }}"
+              patch: "{{ item.patch | string }}"
+              major_minor_compact: "{{ item.branch_key }}"
+              fpm_service: "php{{ item.branch }}-fpm"
+              fpm_socket: "/run/php/php{{ item.branch }}-fpm.sock"
+          loop: "{{ php_selected_releases }}"
+
+      rescue:
+        - name: Fall back to bundled PHP branch metadata
+          ansible.builtin.set_fact:
+            php_versions_available: "{{ php_versions_fallback }}"
+            php_version_source: "fallback"
+
+        - name: Warn about PHP release catalog fallback
+          ansible.builtin.debug:
+            msg: "Falling back to bundled PHP release metadata because the php.net catalog could not be parsed."
+
+    - name: Persist PHP version map for roles
+      ansible.builtin.set_fact:
+        php_versions_all: "{{ php_versions_available }}"
 
     - name: Validate server type
       ansible.builtin.assert:
@@ -81,7 +186,8 @@
           - "=== Deployment Configuration ==="
           - "Domain: {{ domain }}"
           - "Server Type: {{ server_type }}"
-          - "PHP Version: {{ php_versions_available[php_active].label }} (active, all 4 latest minors will be installed)"
+          - "PHP Version: {{ php_versions_available[php_active].label }} (active, latest {{ php_version_branches_count }} discovered minor branches will be installed)"
+          - "PHP Version Source: {{ php_version_source }}"
           - "Database: {{ db_name }}"
           - "WordPress Prefix: {{ wp_prefix }}"
 

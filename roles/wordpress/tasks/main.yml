@@ -3,6 +3,14 @@
     path: "{{ wp_root }}/wp-settings.php"
   register: wordpress_installation
 
+- name: Ensure WordPress document root exists
+  ansible.builtin.file:
+    path: "{{ wp_root }}"
+    state: directory
+    owner: "{{ vhost_webroot_owner | default('www-data') }}"
+    group: "{{ vhost_webroot_group | default('www-data') }}"
+    mode: "{{ vhost_webroot_mode | default('0755') }}"
+
 - name: Download WordPress archive
   ansible.builtin.get_url:
     url: https://wordpress.org/latest.zip
@@ -22,8 +30,8 @@
     src: /tmp/wordpress/
     dest: "{{ wp_root }}/"
     remote_src: yes
-    owner: www-data
-    group: www-data
+    owner: "{{ vhost_webroot_owner | default('www-data') }}"
+    group: "{{ vhost_webroot_group | default('www-data') }}"
   when: not wordpress_installation.stat.exists
 
 - name: Check whether wp-config.php already exists
@@ -36,9 +44,9 @@
     src: "{{ wp_root }}/wp-config-sample.php"
     dest: "{{ wp_root }}/wp-config.php"
     remote_src: yes
-    owner: www-data
-    group: www-data
-    mode: "0640"
+    owner: "{{ vhost_webroot_owner | default('www-data') }}"
+    group: "{{ vhost_webroot_group | default('www-data') }}"
+    mode: "{{ vhost_private_file_mode | default('0640') }}"
   when: not wordpress_config.stat.exists
 
 - name: Write WordPress database name
@@ -81,6 +89,41 @@
   ansible.builtin.file:
     path: "{{ wp_root }}"
     state: directory
-    owner: www-data
-    group: www-data
-    recurse: yes
+    owner: "{{ vhost_webroot_owner | default('www-data') }}"
+    group: "{{ vhost_webroot_group | default('www-data') }}"
+
+- name: Find WordPress directories
+  ansible.builtin.find:
+    paths: "{{ wp_root }}"
+    file_type: directory
+  register: wordpress_directories
+
+- name: Apply directory permissions in WordPress document root
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ vhost_webroot_owner | default('www-data') }}"
+    group: "{{ vhost_webroot_group | default('www-data') }}"
+    mode: "{{ vhost_webroot_mode | default('0755') }}"
+  loop: "{{ wordpress_directories.files }}"
+
+- name: Find WordPress files
+  ansible.builtin.find:
+    paths: "{{ wp_root }}"
+    file_type: file
+  register: wordpress_files
+
+- name: Apply file permissions in WordPress document root
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ vhost_webroot_owner | default('www-data') }}"
+    group: "{{ vhost_webroot_group | default('www-data') }}"
+    mode: "{{ vhost_file_mode | default('0644') }}"
+  loop: "{{ wordpress_files.files }}"
+
+- name: Tighten wp-config.php permissions
+  ansible.builtin.file:
+    path: "{{ wp_root }}/wp-config.php"
+    owner: "{{ vhost_webroot_owner | default('www-data') }}"
+    group: "{{ vhost_webroot_group | default('www-data') }}"
+    mode: "{{ vhost_private_file_mode | default('0640') }}"
+  when: wordpress_config.stat.exists or (not wordpress_installation.stat.exists)

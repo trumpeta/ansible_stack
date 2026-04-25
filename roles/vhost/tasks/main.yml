@@ -1,95 +1,117 @@
 - name: Install Nginx
-  apt:
+  ansible.builtin.apt:
     name: nginx
     state: present
   when: server_type == "nginx"
 
 - name: Start Nginx
-  systemd:
+  ansible.builtin.systemd:
     name: nginx
     state: started
     enabled: yes
   when: server_type == "nginx"
 
 - name: Install Apache
-  apt:
+  ansible.builtin.apt:
     name: apache2
     state: present
   when: server_type == "apache"
 
+- name: Enable required Apache modules
+  ansible.builtin.command: "a2enmod {{ item }}"
+  register: apache_module_enable
+  changed_when: "'already enabled' not in apache_module_enable.stdout"
+  failed_when:
+    - apache_module_enable.rc != 0
+    - "'already enabled' not in apache_module_enable.stdout"
+  loop:
+    - proxy
+    - proxy_fcgi
+    - setenvif
+    - rewrite
+  when: server_type == "apache"
+  notify: Reload Apache
+
 - name: Start Apache
-  systemd:
+  ansible.builtin.systemd:
     name: apache2
     state: started
     enabled: yes
   when: server_type == "apache"
 
-- name: Create web root directory
-  file:
-    path: "{{ vhost_webroot_base }}/{{ domain }}/current"
+- name: Ensure site root directory exists
+  ansible.builtin.file:
+    path: "{{ vhost_site_root }}"
     state: directory
-    recurse: yes
+    owner: "{{ vhost_webroot_owner }}"
+    group: "{{ vhost_webroot_group }}"
+    mode: "{{ vhost_site_root_mode }}"
+
+- name: Ensure current vhost root directory exists
+  ansible.builtin.file:
+    path: "{{ vhost_current_path }}"
+    state: directory
+    owner: "{{ vhost_webroot_owner }}"
+    group: "{{ vhost_webroot_group }}"
+    mode: "{{ vhost_current_mode }}"
+
+- name: Ensure document root directory exists
+  ansible.builtin.file:
+    path: "{{ vhost_document_root }}"
+    state: directory
     owner: "{{ vhost_webroot_owner }}"
     group: "{{ vhost_webroot_group }}"
     mode: "{{ vhost_webroot_mode }}"
 
-- name: Check if Nginx vhost config exists
-  ansible.builtin.stat:
-    path: "/etc/nginx/sites-available/{{ domain }}"
-  register: nginx_config_stat
-  when: server_type == "nginx"
-
-- name: Create Nginx virtual host config (skip if exists)
-  template:
+- name: Create Nginx virtual host config
+  ansible.builtin.template:
     src: nginx_vhost.conf.j2
     dest: "/etc/nginx/sites-available/{{ domain }}"
-  when: server_type == "nginx" and not nginx_config_stat.stat.exists
+  when: server_type == "nginx"
   notify: Reload Nginx
 
 - name: Enable Nginx site
-  file:
+  ansible.builtin.file:
     src: "/etc/nginx/sites-available/{{ domain }}"
     dest: "/etc/nginx/sites-enabled/{{ domain }}"
     state: link
+    force: yes
   when: server_type == "nginx"
   notify: Reload Nginx
 
-- name: Check if Apache vhost config exists
-  ansible.builtin.stat:
-    path: "/etc/apache2/sites-available/{{ domain }}.conf"
-  register: apache_config_stat
-  when: server_type == "apache"
-
-- name: Create Apache virtual host config (skip if exists)
-  template:
+- name: Create Apache virtual host config
+  ansible.builtin.template:
     src: apache_vhost.conf.j2
     dest: "/etc/apache2/sites-available/{{ domain }}.conf"
-  when: server_type == "apache" and not apache_config_stat.stat.exists
-  notify: Reload Apache
-
-- name: Enable Apache site (skip if already enabled)
-  command: a2ensite {{ domain }}
-  register: apache_ensite_result
-  changed_when: "'already enabled' not in apache_ensite_result.stderr"
-  failed_when: apache_ensite_result.rc != 0 and "'already enabled' not in apache_ensite_result.stderr"
   when: server_type == "apache"
   notify: Reload Apache
 
-- name: Check if OLS vhost config exists
-  ansible.builtin.stat:
-    path: "/usr/local/lsws/conf/vhosts/{{ domain }}.conf"
-  register: ols_config_stat
+- name: Enable Apache site
+  ansible.builtin.command: "a2ensite {{ domain }}.conf"
+  register: apache_ensite_result
+  changed_when: "'already enabled' not in apache_ensite_result.stdout"
+  failed_when:
+    - apache_ensite_result.rc != 0
+    - "'already enabled' not in apache_ensite_result.stdout"
+  when: server_type == "apache"
+  notify: Reload Apache
+
+- name: Ensure OpenLiteSpeed vhost directory exists
+  ansible.builtin.file:
+    path: /usr/local/lsws/conf/vhosts
+    state: directory
+    mode: "0755"
   when: server_type == "ols"
 
-- name: Create OpenLiteSpeed virtual host config (skip if exists)
-  template:
+- name: Create OpenLiteSpeed virtual host config
+  ansible.builtin.template:
     src: litespeed_vhost.conf.j2
     dest: "/usr/local/lsws/conf/vhosts/{{ domain }}.conf"
-  when: server_type == "ols" and not ols_config_stat.stat.exists
+  when: server_type == "ols"
   notify: Reload LiteSpeed
 
 - name: Create log directories for OLS
-  file:
-    path: "/usr/local/lsws/logs/{{ domain }}"
+  ansible.builtin.file:
+    path: /usr/local/lsws/logs
     state: directory
   when: server_type == "ols"

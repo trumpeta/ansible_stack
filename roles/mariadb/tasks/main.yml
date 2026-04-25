@@ -2,12 +2,20 @@
   ansible.builtin.apt:
     name: "{{ mariadb_packages }}"
     state: present
+    update_cache: yes
+    cache_valid_time: 3600
+    lock_timeout: 180
 
 - name: Ensure MariaDB is running
   ansible.builtin.systemd:
     name: "{{ mariadb_service_name }}"
     state: started
     enabled: yes
+
+- name: Wait for MariaDB socket
+  ansible.builtin.wait_for:
+    path: "{{ mariadb_socket }}"
+    timeout: 30
 
 - name: Create SQL bootstrap script for application database
   ansible.builtin.copy:
@@ -20,15 +28,10 @@
       GRANT ALL PRIVILEGES ON `{{ db_name }}`.* TO '{{ db_user }}'@'localhost';
       FLUSH PRIVILEGES;
 
-- name: Check if database already exists
-  ansible.builtin.shell: >
-    mysql --protocol=socket --socket={{ mariadb_socket }}
-    -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='{{ db_name }}';"
-  register: db_check
-  changed_when: false
-  failed_when: false
-
-- name: Initialize application database and user (skip if exists)
+- name: Initialize or repair application database and user
   ansible.builtin.shell: mysql --protocol=socket --socket={{ mariadb_socket }} < /root/ansible_db_setup.sql
-  when: db_check.stdout == ""
   changed_when: true
+  register: mariadb_bootstrap
+  retries: 3
+  delay: 5
+  until: mariadb_bootstrap.rc == 0

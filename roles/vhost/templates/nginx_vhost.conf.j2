@@ -2,7 +2,7 @@ server {
     listen 80;
     server_name {{ domain }} www.{{ domain }};
 
-    root /var/www/{{ domain }}/current;
+    root {{ vhost_document_root }};
     index index.php index.html index.htm;
 
     # For multiple PHP versions: include /usr/local/etc/php-versions/php-nginx-upstreams.conf;
@@ -15,7 +15,7 @@ server {
     location ~ \.php$ {
         include snippets/fastcgi-php.conf;
         # Active PHP version: {{ php_versions_all[php_active].label }}
-        fastcgi_pass unix:/var/run/php/php{{ php_active }}-fpm.sock;
+        fastcgi_pass unix:{{ php_active_fpm_socket }};
         fastcgi_split_path_info ^(.+\.php)(/.+)$;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         fastcgi_param PATH_INFO $fastcgi_path_info;

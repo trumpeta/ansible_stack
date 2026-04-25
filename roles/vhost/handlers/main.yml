@@ -1,15 +1,15 @@
 ---
 - name: Reload Nginx
-  systemd:
+  ansible.builtin.systemd:
     name: nginx
     state: reloaded
 
 - name: Reload Apache
-  systemd:
+  ansible.builtin.systemd:
     name: apache2
     state: reloaded
 
 - name: Reload LiteSpeed
-  systemd:
-    name: lsws
-    state: reloaded
+  ansible.builtin.systemd:
+    name: lshttpd
+    state: restarted
