@@ -2,11 +2,16 @@
 
 set -e
 
-echo "[1] Detecting server IP..."
-SERVER=$(curl -s ifconfig.me)
-USER="root"
+read -rp "[1] Target server IP or hostname: " SERVER
+read -rp "[2] SSH user [root]: " USER
+USER=${USER:-root}
 
-echo "[2] Checking SSH key..."
+if [ -z "${SERVER}" ]; then
+  echo "Cilovy server musi byt vyplnen."
+  exit 1
+fi
+
+echo "[3] Checking SSH key..."
 
 if [ ! -f ~/.ssh/id_rsa.pub ]; then
   echo "Generuji SSH key..."
@@ -15,13 +20,13 @@ else
   echo "SSH key existuje"
 fi
 
-echo "[3] Kopíruji SSH key na server..."
+echo "[4] Kopiruji SSH key na server..."
 
 ssh-copy-id ${USER}@${SERVER} || \
 cat ~/.ssh/id_rsa.pub | ssh ${USER}@${SERVER} \
 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 
-echo "[4] Instalace Ansible + tools..."
+echo "[5] Instalace Ansible + tools..."
 
 if command -v apt >/dev/null; then
   sudo apt update
@@ -35,22 +40,22 @@ else
   exit 1
 fi
 
-echo "[5] Stažení deploy stacku..."
+echo "[6] Stazeni deploy stacku..."
 
 mkdir -p ~/deploy
 cd ~/deploy
 
 if [ ! -d "ansible-stack" ]; then
-  git clone https://github.com/YOUR_REPO/ansible-stack.git
+  git clone https://github.com/trumpeta/ansible_stack.git ansible-stack
 fi
 
 cd ansible-stack
 
-echo "[6] Spouštím interaktivní deployment..."
+echo "[7] Spoustim interaktivni deployment..."
 
 ansible-playbook -i "${SERVER}," -u ${USER} interactive_full.yml
 
 echo ""
-echo "✅ HOTOVO"
-echo "👉 Admin: http://$SERVER:7080 (OLS pokud použit)"
-echo "👉 Web:   http://$SERVER"
+echo "HOTOVO"
+echo "Admin: http://$SERVER:7080 (pokud byl zvolen OLS)"
+echo "Web:   http://$SERVER"

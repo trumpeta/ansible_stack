@@ -4,12 +4,57 @@
 
   vars_prompt:
     - { name: domain, prompt: "Domain", private: no }
-    - { name: server_type, prompt: "Server (ols/nginx/apache)", private: no }
-    - { name: php_active, prompt: "PHP (84/85)", private: no }
-    - { name: db_name, prompt: "DB name", private: no }
-    - { name: db_user, prompt: "DB user", private: no }
-    - { name: db_pass, prompt: "DB pass", private: yes }
-    - { name: wp_prefix, prompt: "WP prefix", private: no, default: "wp_" }
+    - { name: server_type, prompt: "Server type (ols/nginx/apache)", private: no }
+    - { name: php_active, prompt: "PHP version (84/85)", private: no, default: "84" }
+    - { name: db_name, prompt: "Database name", private: no }
+    - { name: db_user, prompt: "Database user", private: no }
+    - { name: db_pass, prompt: "Database password", private: yes }
+    - { name: wp_prefix, prompt: "WordPress table prefix", private: no, default: "wp_" }
+
+  vars:
+    deploy_app_enabled: false
+    db_host: localhost
+    wp_root: "/var/www/{{ domain }}/current"
+
+  pre_tasks:
+    - name: Normalize interactive values
+      ansible.builtin.set_fact:
+        server_type_normalized: "{{ server_type | lower | trim }}"
+        php_version_token: "{{ php_active | trim }}"
+        db_name_normalized: "{{ db_name | trim }}"
+        db_user_normalized: "{{ db_user | trim }}"
+        wp_prefix_normalized: "{{ wp_prefix | trim }}"
+
+    - name: Validate server type
+      ansible.builtin.assert:
+        that:
+          - server_type_normalized in ['ols', 'nginx', 'apache']
+        fail_msg: "Supported server_type values are: ols, nginx, apache."
+
+    - name: Validate PHP version choice
+      ansible.builtin.assert:
+        that:
+          - php_version_token in ['84', '85']
+        fail_msg: "Supported php_active values are: 84 or 85."
+
+    - name: Validate database identifiers and WordPress prefix
+      ansible.builtin.assert:
+        that:
+          - db_name_normalized is match('^[A-Za-z0-9_]+$')
+          - db_user_normalized is match('^[A-Za-z0-9_]+$')
+          - wp_prefix_normalized is match('^[A-Za-z_][A-Za-z0-9_]*$')
+          - db_pass | trim | length > 0
+        fail_msg: "Database name, database user and WordPress prefix may contain only letters, digits and underscore. Database password cannot be empty."
+
+    - name: Persist normalized values for roles
+      ansible.builtin.set_fact:
+        server_type: "{{ server_type_normalized }}"
+        php_active: "{{ php_version_token }}"
+        db_name: "{{ db_name_normalized }}"
+        db_user: "{{ db_user_normalized }}"
+        wp_prefix: "{{ wp_prefix_normalized }}"
+        db_pass_sql_escaped: "{{ db_pass | replace(\"'\", \"''\") }}"
+        db_pass_php_escaped: "{{ db_pass | replace('\\\\', '\\\\\\\\') | replace(\"'\", \"\\\\'\") }}"
 
   roles:
     - common
@@ -21,4 +66,5 @@
     - vhost
     - wordpress
     - ssl
-    - deploy
+    - role: deploy
+      when: deploy_app_enabled | bool

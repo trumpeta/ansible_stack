@@ -1,13 +1,86 @@
-- get_url:
+- name: Check whether WordPress is already installed
+  ansible.builtin.stat:
+    path: "{{ wp_root }}/wp-settings.php"
+  register: wordpress_installation
+
+- name: Download WordPress archive
+  ansible.builtin.get_url:
     url: https://wordpress.org/latest.zip
     dest: /tmp/wp.zip
+    mode: "0644"
+  when: not wordpress_installation.stat.exists
 
-- unarchive:
+- name: Extract WordPress archive
+  ansible.builtin.unarchive:
     src: /tmp/wp.zip
     dest: /tmp/
     remote_src: yes
+  when: not wordpress_installation.stat.exists
 
-- copy:
+- name: Copy WordPress files to the web root
+  ansible.builtin.copy:
     src: /tmp/wordpress/
-    dest: "/var/www/{{ domain }}/current/"
+    dest: "{{ wp_root }}/"
     remote_src: yes
+    owner: www-data
+    group: www-data
+  when: not wordpress_installation.stat.exists
+
+- name: Check whether wp-config.php already exists
+  ansible.builtin.stat:
+    path: "{{ wp_root }}/wp-config.php"
+  register: wordpress_config
+
+- name: Seed wp-config.php from sample
+  ansible.builtin.copy:
+    src: "{{ wp_root }}/wp-config-sample.php"
+    dest: "{{ wp_root }}/wp-config.php"
+    remote_src: yes
+    owner: www-data
+    group: www-data
+    mode: "0640"
+  when: not wordpress_config.stat.exists
+
+- name: Write WordPress database name
+  ansible.builtin.lineinfile:
+    path: "{{ wp_root }}/wp-config.php"
+    regexp: "^define\\(\\s*'DB_NAME'"
+    line: "define( 'DB_NAME', '{{ db_name }}' );"
+
+- name: Write WordPress database user
+  ansible.builtin.lineinfile:
+    path: "{{ wp_root }}/wp-config.php"
+    regexp: "^define\\(\\s*'DB_USER'"
+    line: "define( 'DB_USER', '{{ db_user }}' );"
+
+- name: Write WordPress database password
+  ansible.builtin.lineinfile:
+    path: "{{ wp_root }}/wp-config.php"
+    regexp: "^define\\(\\s*'DB_PASSWORD'"
+    line: "define( 'DB_PASSWORD', '{{ db_pass_php_escaped }}' );"
+
+- name: Write WordPress database host
+  ansible.builtin.lineinfile:
+    path: "{{ wp_root }}/wp-config.php"
+    regexp: "^define\\(\\s*'DB_HOST'"
+    line: "define( 'DB_HOST', '{{ db_host }}' );"
+
+- name: Write WordPress table prefix
+  ansible.builtin.lineinfile:
+    path: "{{ wp_root }}/wp-config.php"
+    regexp: "\\$table_prefix\\s*=\\s*'[^']*';"
+    line: "$table_prefix = '{{ wp_prefix }}';"
+
+- name: Disable WordPress debug mode by default
+  ansible.builtin.lineinfile:
+    path: "{{ wp_root }}/wp-config.php"
+    regexp: "define\\(\\s*'WP_DEBUG'\\s*,\\s*false\\s*\\);"
+    line: "define( 'WP_DEBUG', false );"
+
+- name: Ensure WordPress files are owned by the web server
+  ansible.builtin.file:
+    path: "{{ wp_root }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    recurse: yes
