@@ -1,0 +1,6 @@
+- apt:
+    update_cache: yes
+
+- apt:
+    name: [wget, curl, unzip, git, ufw, fail2ban]
+    state: present

@@ -1,0 +1,9 @@
+- apt:
+    name: certbot
+    state: present
+
+- command: >
+    certbot certonly --standalone
+    -d {{ domain }} -d www.{{ domain }}
+    --non-interactive --agree-tos
+    -m admin@{{ domain }}

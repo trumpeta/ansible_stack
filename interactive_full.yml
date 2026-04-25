@@ -1,0 +1,24 @@
+---
+- hosts: all
+  become: yes
+
+  vars_prompt:
+    - { name: domain, prompt: "Domain", private: no }
+    - { name: server_type, prompt: "Server (ols/nginx/apache)", private: no }
+    - { name: php_active, prompt: "PHP (84/85)", private: no }
+    - { name: db_name, prompt: "DB name", private: no }
+    - { name: db_user, prompt: "DB user", private: no }
+    - { name: db_pass, prompt: "DB pass", private: yes }
+    - { name: wp_prefix, prompt: "WP prefix", private: no, default: "wp_" }
+
+  roles:
+    - common
+    - security
+    - litespeed
+    - php
+    - mariadb
+    - redis
+    - vhost
+    - wordpress
+    - ssl
+    - deploy

@@ -1,0 +1,9 @@
+- apt:
+    name:
+      - lsphp84
+      - lsphp85
+      - lsphp85-mysql
+      - lsphp85-redis
+      - lsphp85-opcache
+    state: present
+  when: server_type == "ols"

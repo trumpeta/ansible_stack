@@ -1,0 +1,20 @@
+- name: Create releases dir
+  file:
+    path: "/var/www/{{ domain }}/releases"
+    state: directory
+
+- name: Timestamp
+  set_fact:
+    rel: "/var/www/{{ domain }}/releases/{{ ansible_date_time.iso8601_basic }}"
+
+- git:
+    repo: "https://github.com/YOUR_REPO/app.git"
+    dest: "{{ rel }}"
+
+- file:
+    src: "{{ rel }}"
+    dest: "/var/www/{{ domain }}/current"
+    state: link
+    force: yes
+
+- command: /usr/local/lsws/bin/lswsctrl reload

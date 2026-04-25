@@ -1,0 +1,18 @@
+- shell: wget -O - https://repo.litespeed.sh | bash
+  args:
+    creates: /etc/apt/sources.list.d/lst_debian_repo.list
+  when: server_type == "ols"
+
+- apt:
+    update_cache: yes
+
+- apt:
+    name: openlitespeed
+    state: present
+  when: server_type == "ols"
+
+- systemd:
+    name: lshttpd
+    state: started
+    enabled: yes
+  when: server_type == "ols"

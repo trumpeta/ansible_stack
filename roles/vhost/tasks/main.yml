@@ -1,0 +1,12 @@
+- file:
+    path: "/var/www/{{ domain }}/current"
+    state: directory
+    recurse: yes
+
+- copy:
+    dest: "/usr/local/lsws/conf/vhosts/{{ domain }}.conf"
+    content: |
+      docRoot /var/www/{{ domain }}/current
+      vhDomain {{ domain }}
+      vhAliases www.{{ domain }}
+  when: server_type == "ols"

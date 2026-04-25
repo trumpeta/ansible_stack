@@ -1,0 +1,8 @@
+- apt:
+    name: mariadb-server
+    state: present
+
+- systemd:
+    name: mariadb
+    state: started
+    enabled: yes

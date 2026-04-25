@@ -1,0 +1,8 @@
+- apt:
+    name: redis-server
+    state: present
+
+- systemd:
+    name: redis-server
+    state: started
+    enabled: yes

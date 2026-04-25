@@ -1,0 +1,13 @@
+- get_url:
+    url: https://wordpress.org/latest.zip
+    dest: /tmp/wp.zip
+
+- unarchive:
+    src: /tmp/wp.zip
+    dest: /tmp/
+    remote_src: yes
+
+- copy:
+    src: /tmp/wordpress/
+    dest: "/var/www/{{ domain }}/current/"
+    remote_src: yes
