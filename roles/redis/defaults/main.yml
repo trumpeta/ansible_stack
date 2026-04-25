@@ -1,0 +1,3 @@
+# Redis defaults
+redis_service_name: redis-server
+redis_enabled: yes

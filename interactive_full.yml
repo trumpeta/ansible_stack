@@ -5,7 +5,7 @@
   vars_prompt:
     - { name: domain, prompt: "Domain", private: no }
     - { name: server_type, prompt: "Server type (ols/nginx/apache)", private: no }
-    - { name: php_active, prompt: "PHP version (84/85)", private: no, default: "84" }
+    - { name: php_version, prompt: "PHP version (82/83/84/85)", private: no, default: "85" }
     - { name: db_name, prompt: "Database name", private: no }
     - { name: db_user, prompt: "Database user", private: no }
     - { name: db_pass, prompt: "Database password", private: yes }
@@ -16,11 +16,30 @@
     db_host: localhost
     wp_root: "/var/www/{{ domain }}/current"
 
+    # Available PHP versions (latest patches for each minor)
+    php_versions_available:
+      "82":
+        label: "PHP 8.2.30"
+        version: "8.2"
+        patch: "30"
+      "83":
+        label: "PHP 8.3.30"
+        version: "8.3"
+        patch: "30"
+      "84":
+        label: "PHP 8.4.20"
+        version: "8.4"
+        patch: "20"
+      "85":
+        label: "PHP 8.5.5"
+        version: "8.5"
+        patch: "5"
+
   pre_tasks:
     - name: Normalize interactive values
       ansible.builtin.set_fact:
         server_type_normalized: "{{ server_type | lower | trim }}"
-        php_version_token: "{{ php_active | trim }}"
+        php_version_normalized: "{{ php_version | trim }}"
         db_name_normalized: "{{ db_name | trim }}"
         db_user_normalized: "{{ db_user | trim }}"
         wp_prefix_normalized: "{{ wp_prefix | trim }}"
@@ -34,8 +53,8 @@
     - name: Validate PHP version choice
       ansible.builtin.assert:
         that:
-          - php_version_token in ['84', '85']
-        fail_msg: "Supported php_active values are: 84 or 85."
+          - php_version_normalized in php_versions_available.keys() | list
+        fail_msg: "Supported PHP versions: {{ php_versions_available.keys() | list }}"
 
     - name: Validate database identifiers and WordPress prefix
       ansible.builtin.assert:
@@ -49,12 +68,22 @@
     - name: Persist normalized values for roles
       ansible.builtin.set_fact:
         server_type: "{{ server_type_normalized }}"
-        php_active: "{{ php_version_token }}"
+        php_active: "{{ php_version_normalized }}"
         db_name: "{{ db_name_normalized }}"
         db_user: "{{ db_user_normalized }}"
         wp_prefix: "{{ wp_prefix_normalized }}"
         db_pass_sql_escaped: "{{ db_pass | replace(\"'\", \"''\") }}"
         db_pass_php_escaped: "{{ db_pass | replace('\\\\', '\\\\\\\\') | replace(\"'\", \"\\\\'\") }}"
+
+    - name: Display deployment configuration
+      debug:
+        msg:
+          - "=== Deployment Configuration ==="
+          - "Domain: {{ domain }}"
+          - "Server Type: {{ server_type }}"
+          - "PHP Version: {{ php_versions_available[php_active].label }} (active, all 4 latest minors will be installed)"
+          - "Database: {{ db_name }}"
+          - "WordPress Prefix: {{ wp_prefix }}"
 
   roles:
     - common

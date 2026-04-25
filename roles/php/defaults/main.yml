@@ -1,0 +1,91 @@
+# PHP defaults - Multi-version support (4 latest minors)
+# All available PHP versions (latest patches for each minor)
+php_versions_all:
+  "82":
+    label: "PHP 8.2.30"
+    version: "8.2"
+    patch: "30"
+  "83":
+    label: "PHP 8.3.30"
+    version: "8.3"
+    patch: "30"
+  "84":
+    label: "PHP 8.4.20"
+    version: "8.4"
+    patch: "20"
+  "85":
+    label: "PHP 8.5.5"
+    version: "8.5"
+    patch: "5"
+
+# Active version selected by user (from interactive_full.yml)
+php_active: "85"                    # Active version (82/83/84/85)
+
+# Computed variables for active version
+php_active_version: "{{ php_versions_all[php_active].version }}"
+php_active_patch: "{{ php_versions_all[php_active].patch }}"
+php_active_label: "{{ php_versions_all[php_active].label }}"
+
+# Common packages for all PHP versions (shared extensions)
+php_common_extensions:
+  - mysql
+  - redis
+  - opcache
+  - memcached
+  - curl
+  - gd
+  - json
+  - cli
+  - mbstring
+  - xml
+  - zip
+  - intl
+  - bcmath
+  - soap
+  - pdo
+  - pdo_mysql
+  - mysqli
+  - pdo_pgsql
+  - pgsql
+  - sqlite3
+  - pdo_sqlite
+  - exif
+  - pcntl
+  - sockets
+  - tokenizer
+  - fileinfo
+  - ftp
+  - gettext
+  - iconv
+  - phar
+  - posix
+  - shmop
+  - sysvmsg
+  - sysvsem
+  - sysvshm
+
+# OLS packages - install all 4 versions
+php_ols_all_packages: |
+  {% set packages = [] %}
+  {% for version_key, version_info in php_versions_all.items() %}
+    {% set version_short = version_key %}
+    {% set _ = packages.append('lsphp' + version_short) %}
+    {% for ext in php_common_extensions %}
+      {% set _ = packages.append('lsphp' + version_short + '-' + ext) %}
+    {% endfor %}
+  {% endfor %}
+  {{ packages | unique | list }}
+
+# Nginx packages - install all 4 versions with FPM
+php_nginx_all_packages: |
+  {% set packages = [] %}
+  {% for version_key, version_info in php_versions_all.items() %}
+    {% set version_short = version_key %}
+    {% set _ = packages.append('php' + version_short + '-fpm') %}
+    {% for ext in php_common_extensions %}
+      {% set _ = packages.append('php' + version_short + '-' + ext) %}
+    {% endfor %}
+  {% endfor %}
+  {{ packages | unique | list }}
+
+php_enabled: yes

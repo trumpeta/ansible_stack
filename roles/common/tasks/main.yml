@@ -1,6 +1,8 @@
-- apt:
-    update_cache: yes
+- name: Update apt cache
+  apt:
+    update_cache: "{{ apt_update_cache }}"
 
-- apt:
-    name: [wget, curl, unzip, git, ufw, fail2ban]
+- name: Install common packages
+  apt:
+    name: "{{ common_packages }}"
     state: present

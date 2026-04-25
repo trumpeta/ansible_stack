@@ -26,17 +26,24 @@
 
 - name: Create web root directory
   file:
-    path: "/var/www/{{ domain }}/current"
+    path: "{{ vhost_webroot_base }}/{{ domain }}/current"
     state: directory
     recurse: yes
-    owner: www-data
-    group: www-data
+    owner: "{{ vhost_webroot_owner }}"
+    group: "{{ vhost_webroot_group }}"
+    mode: "{{ vhost_webroot_mode }}"
 
-- name: Create Nginx virtual host config
+- name: Check if Nginx vhost config exists
+  ansible.builtin.stat:
+    path: "/etc/nginx/sites-available/{{ domain }}"
+  register: nginx_config_stat
+  when: server_type == "nginx"
+
+- name: Create Nginx virtual host config (skip if exists)
   template:
     src: nginx_vhost.conf.j2
     dest: "/etc/nginx/sites-available/{{ domain }}"
-  when: server_type == "nginx"
+  when: server_type == "nginx" and not nginx_config_stat.stat.exists
   notify: Reload Nginx
 
 - name: Enable Nginx site
@@ -47,35 +54,38 @@
   when: server_type == "nginx"
   notify: Reload Nginx
 
-- name: Create Apache virtual host config
+- name: Check if Apache vhost config exists
+  ansible.builtin.stat:
+    path: "/etc/apache2/sites-available/{{ domain }}.conf"
+  register: apache_config_stat
+  when: server_type == "apache"
+
+- name: Create Apache virtual host config (skip if exists)
   template:
     src: apache_vhost.conf.j2
     dest: "/etc/apache2/sites-available/{{ domain }}.conf"
-  when: server_type == "apache"
+  when: server_type == "apache" and not apache_config_stat.stat.exists
   notify: Reload Apache
 
-- name: Enable Apache site
+- name: Enable Apache site (skip if already enabled)
   command: a2ensite {{ domain }}
+  register: apache_ensite_result
+  changed_when: "'already enabled' not in apache_ensite_result.stderr"
+  failed_when: apache_ensite_result.rc != 0 and "'already enabled' not in apache_ensite_result.stderr"
   when: server_type == "apache"
   notify: Reload Apache
 
-- name: Create OpenLiteSpeed virtual host config
-  copy:
-    dest: "/usr/local/lsws/conf/vhosts/{{ domain }}.conf"
-    content: |
-      docRoot                   /var/www/{{ domain }}/current
-      vhDomain                  {{ domain }}
-      vhAliases                 www.{{ domain }}
-      adminEmails               admin@{{ domain }}
-      enableGzip                1
-      enableBrCompression       1
-      indexFiles                index.php, index.html
-      errorLog                  /usr/local/lsws/logs/{{ domain }}.error_log
-      accessLog                 /usr/local/lsws/logs/{{ domain }}.access_log
-      vhssl                     1
-      ssl_certFile              /usr/local/lsws/ssl/{{ domain }}.crt
-      ssl_keyFile               /usr/local/lsws/ssl/{{ domain }}.key
+- name: Check if OLS vhost config exists
+  ansible.builtin.stat:
+    path: "/usr/local/lsws/conf/vhosts/{{ domain }}.conf"
+  register: ols_config_stat
   when: server_type == "ols"
+
+- name: Create OpenLiteSpeed virtual host config (skip if exists)
+  template:
+    src: litespeed_vhost.conf.j2
+    dest: "/usr/local/lsws/conf/vhosts/{{ domain }}.conf"
+  when: server_type == "ols" and not ols_config_stat.stat.exists
   notify: Reload LiteSpeed
 
 - name: Create log directories for OLS

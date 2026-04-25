@@ -1,9 +1,17 @@
-- apt:
+- name: Install certbot
+  apt:
     name: certbot
     state: present
 
-- command: >
+- name: Check if SSL certificate already exists
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ domain }}/fullchain.pem"
+  register: ssl_cert_stat
+
+- name: Generate SSL certificate with certbot (skip if exists)
+  command: >
     certbot certonly --standalone
     -d {{ domain }} -d www.{{ domain }}
     --non-interactive --agree-tos
-    -m admin@{{ domain }}
+    -m {{ certbot_email_default }}
+  when: not ssl_cert_stat.stat.exists

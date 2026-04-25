@@ -1,0 +1,36 @@
+# .ansible-lint
+# Configuration for ansible-lint linting tool
+
+---
+extends: default
+
+# Rules to disable/ignore
+skip_list:
+  - 'package-latest'  # Allow use of latest package manager version
+  - 'role-name'       # Custom role naming allowed
+  - 'name[casing]'    # Allow mixed case in task names
+
+# Rules to enforce
+warn_list:
+  - 'args'
+
+# Patterns to ignore during linting
+exclude_paths:
+  - .git
+  - .github
+  - __pycache__
+  - .pytest_cache
+  - .venv
+
+# Minimum severity to report
+severity: 'medium'
+
+# Use verbosity to diagnose issues
+verbosity: 1
+
+# Roles paths
+roles_path:
+  - roles
+
+# Allow certain tags
+use_default_rules: true

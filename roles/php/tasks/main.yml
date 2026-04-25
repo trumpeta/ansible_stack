@@ -1,9 +1,348 @@
-- apt:
-    name:
-      - lsphp84
-      - lsphp85
-      - lsphp85-mysql
-      - lsphp85-redis
-      - lsphp85-opcache
+---
+# Install all 4 PHP versions (8.2, 8.3, 8.4, 8.5) with latest patches
+
+- name: Install PHP packages for OLS (all 4 versions)
+  apt:
+    name: "{{ php_ols_all_packages | from_yaml }}"
     state: present
   when: server_type == "ols"
+
+- name: Install PHP-FPM packages for Nginx/Apache (all 4 versions)
+  apt:
+    name: "{{ php_nginx_all_packages | from_yaml }}"
+    state: present
+  when: server_type != "ols"
+
+- name: Ensure PHP-FPM services are running (Nginx/Apache)
+  systemd:
+    name: "php{{ item.key }}-fpm"
+    state: started
+    enabled: yes
+  loop: "{{ php_versions_all | dict2items }}"
+  when: server_type != "ols"
+
+# Configure php.ini for each installed version
+
+- name: Configure php.ini for OLS versions
+  block:
+    - name: Copy php.ini-production as base for OLS PHP versions
+      copy:
+        src: "/usr/local/lsws/lsphp{{ item.key }}/etc/php.ini-production"
+        dest: "/usr/local/lsws/lsphp{{ item.key }}/etc/php.ini"
+        remote_src: yes
+      loop: "{{ php_versions_all | dict2items }}"
+
+    - name: Configure php.ini settings for OLS versions
+      ini_file:
+        path: "/usr/local/lsws/lsphp{{ item.key }}/etc/php.ini"
+        section: null
+        option: "{{ setting.key }}"
+        value: "{{ setting.value }}"
+      loop: "{{ php_versions_all | dict2items }}"
+      loop_control:
+        loop_var: item
+      vars:
+        settings:
+          max_execution_time: "300"
+          max_input_time: "300"
+          max_input_vars: "20000"
+          memory_limit: "512M"
+          post_max_size: "256M"
+          upload_max_filesize: "256M"
+          date.timezone: "Europe/Prague"
+          opcache.enable: "1"
+          opcache.memory_consumption: "256"
+          opcache.interned_strings_buffer: "16"
+          opcache.max_accelerated_files: "10000"
+          opcache.validate_timestamps: "1"
+          opcache.revalidate_freq: "0"
+          opcache.fast_shutdown: "1"
+          opcache.enable_cli: "1"
+          opcache.jit: "tracing"
+          opcache.jit_buffer_size: "100M"
+          realpath_cache_size: "4096K"
+          realpath_cache_ttl: "600"
+
+    - name: Enable commonly used extensions in OLS php.ini
+      lineinfile:
+        path: "/usr/local/lsws/lsphp{{ item.key }}/etc/php.ini"
+        regexp: "^;extension={{ extension_key }}"
+        line: "extension={{ extension_key }}"
+        state: present
+      loop: "{{ php_versions_all | dict2items }}"
+      loop_control:
+        loop_var: item
+      vars:
+        extensions_to_enable:
+          - redis
+          - mbstring
+          - xml
+          - zip
+          - intl
+          - bcmath
+          - soap
+          - pdo
+          - pdo_mysql
+          - mysqli
+          - pdo_pgsql
+          - pgsql
+          - sqlite3
+          - pdo_sqlite
+          - exif
+          - pcntl
+          - sockets
+          - tokenizer
+          - fileinfo
+          - ftp
+          - gettext
+          - iconv
+          - phar
+          - posix
+          - shmop
+          - sysvmsg
+          - sysvsem
+          - sysvshm
+  when: server_type == "ols"
+
+- name: Configure php.ini for Nginx/Apache versions
+  block:
+    - name: Copy php.ini-production as base for FPM versions
+      copy:
+        src: "/etc/php/{{ item.value.version }}/fpm/php.ini-production"
+        dest: "/etc/php/{{ item.value.version }}/fpm/php.ini"
+        remote_src: yes
+      loop: "{{ php_versions_all | dict2items }}"
+
+    - name: Configure php.ini settings for FPM versions
+      ini_file:
+        path: "/etc/php/{{ item.value.version }}/fpm/php.ini"
+        section: null
+        option: "{{ setting.key }}"
+        value: "{{ setting.value }}"
+      loop: "{{ php_versions_all | dict2items }}"
+      loop_control:
+        loop_var: item
+      vars:
+        settings:
+          max_execution_time: "300"
+          max_input_time: "300"
+          max_input_vars: "20000"
+          memory_limit: "512M"
+          post_max_size: "256M"
+          upload_max_filesize: "256M"
+          date.timezone: "Europe/Prague"
+          opcache.enable: "1"
+          opcache.memory_consumption: "256"
+          opcache.interned_strings_buffer: "16"
+          opcache.max_accelerated_files: "10000"
+          opcache.validate_timestamps: "1"
+          opcache.revalidate_freq: "0"
+          opcache.fast_shutdown: "1"
+          opcache.enable_cli: "1"
+          opcache.jit: "tracing"
+          opcache.jit_buffer_size: "100M"
+          realpath_cache_size: "4096K"
+          realpath_cache_ttl: "600"
+
+    - name: Enable commonly used extensions in FPM php.ini
+      lineinfile:
+        path: "/etc/php/{{ item.value.version }}/fpm/php.ini"
+        regexp: "^;extension={{ extension_key }}"
+        line: "extension={{ extension_key }}"
+        state: present
+      loop: "{{ php_versions_all | dict2items }}"
+      loop_control:
+        loop_var: item
+      vars:
+        extensions_to_enable:
+          - redis
+          - mbstring
+          - xml
+          - zip
+          - intl
+          - bcmath
+          - soap
+          - pdo
+          - pdo_mysql
+          - mysqli
+          - pdo_pgsql
+          - pgsql
+          - sqlite3
+          - pdo_sqlite
+          - exif
+          - pcntl
+          - sockets
+          - tokenizer
+          - fileinfo
+          - ftp
+          - gettext
+          - iconv
+          - phar
+          - posix
+          - shmop
+          - sysvmsg
+          - sysvsem
+          - sysvshm
+
+    - name: Copy FPM php.ini to CLI version for consistency
+      copy:
+        src: "/etc/php/{{ item.value.version }}/fpm/php.ini"
+        dest: "/etc/php/{{ item.value.version }}/cli/php.ini"
+        remote_src: yes
+      loop: "{{ php_versions_all | dict2items }}"
+  when: server_type != "ols"
+
+# Create switcher configs for easy version changes
+
+- name: Create PHP version switcher script
+  copy:
+    dest: /usr/local/bin/php-switch
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # PHP Version Switcher - easily switch between installed PHP versions
+      # Usage: php-switch <version> [server_type]
+      # Example: php-switch 84 ols
+      # Example: php-switch 85 nginx
+
+      if [ -z "$1" ]; then
+        echo "Usage: php-switch <version> [server_type]"
+        echo "Example: php-switch 84 ols"
+        echo "Example: php-switch 85 nginx"
+        echo ""
+        echo "Available versions:"
+        echo "82 - PHP 8.2.30"
+        echo "83 - PHP 8.3.30"
+        echo "84 - PHP 8.4.20"
+        echo "85 - PHP 8.5.5"
+        echo ""
+        echo "Available configs in /usr/local/etc/php-versions/:"
+        ls -1 /usr/local/etc/php-versions/ 2>/dev/null || echo "No version configs found"
+        exit 1
+      fi
+
+      VERSION=$1
+      SERVER_TYPE=${2:-ols}
+
+      CONFIG_DIR="/usr/local/etc/php-versions"
+      CONFIG_FILE="$CONFIG_DIR/${VERSION}-${SERVER_TYPE}.conf"
+
+      if [ -f "$CONFIG_FILE" ]; then
+        echo "Switching to PHP $VERSION ($SERVER_TYPE)..."
+        source "$CONFIG_FILE"
+        echo "✓ Configuration updated"
+        echo "You may need to reload your web server:"
+        if [ "$SERVER_TYPE" == "ols" ]; then
+          echo "  systemctl reload lshttpd"
+        elif [ "$SERVER_TYPE" == "nginx" ]; then
+          echo "  systemctl reload nginx"
+        elif [ "$SERVER_TYPE" == "apache" ]; then
+          echo "  systemctl reload apache2"
+        fi
+      else
+        echo "Config not found: $CONFIG_FILE"
+        exit 1
+      fi
+
+- name: Create version config directory
+  file:
+    path: /usr/local/etc/php-versions
+    state: directory
+    mode: "0755"
+
+- name: Create LiteSpeed external app configs for all versions
+  copy:
+    dest: "/usr/local/etc/php-versions/{{ item.key }}-ols-external-apps.conf"
+    mode: "0644"
+    content: |
+      # LiteSpeed External App Configurations for PHP {{ item.value.label }}
+      # Generated by Ansible - do not edit directly
+      #
+      # Add these configurations to your LiteSpeed config:
+      # /usr/local/lsws/conf/httpd_config.conf (in <extProcessorList> section)
+      #
+      # Usage: Add the appropriate block below based on desired PHP version
+      # Then reference in vhost context: extprocessor lsphp{{ item.key }}
+
+      <extprocessor lsphp{{ item.key }}>
+        className                lsapi
+        enableLEApi               1
+        processName               lsphp{{ item.key }}
+        versionNumber             {{ item.value.version }}.{{ item.value.patch }}
+        maxConns                  10
+        env                       PHP_LSAPI_MAX_REQUESTS=500
+        env                       PHP_LSAPI_CHILDREN=35
+        initTimeout               60
+        retryTimeout              0
+        persistConn               1
+        respBuffer                0
+        autoStart                 2
+        path                      /usr/local/lsws/lsphp{{ item.key }}/bin/lsphp
+        backlog                   100
+        instances                 1
+        priority                  0
+        memSoftLimit              2047M
+        memHardLimit              2048M
+        procHardLimit             500
+      </extprocessor>
+  loop: "{{ php_versions_all | dict2items }}"
+  when: server_type == "ols"
+
+- name: Create Nginx version switching config for all versions
+  copy:
+    dest: "/usr/local/etc/php-versions/php-nginx-upstreams.conf"
+    mode: "0644"
+    content: |
+      # Nginx Upstream PHP-FPM Configurations for all PHP versions
+      # Generated by Ansible - do not edit directly
+      #
+      # Include in your Nginx vhost config:
+      # include /usr/local/etc/php-versions/php-nginx-upstreams.conf;
+      # Then use: fastcgi_pass phpfpm_<version>;
+
+      {% for version_key, version_info in php_versions_all.items() %}
+      # PHP {{ version_info.label }}
+      upstream phpfpm_{{ version_key }} {
+          server unix:/var/run/php/php{{ version_key }}-fpm.sock;
+          keepalive 32;
+      }
+      {% endfor %}
+  when: server_type == "nginx"
+
+- name: Create Apache version switching config for all versions
+  copy:
+    dest: "/usr/local/etc/php-versions/php-apache-proxies.conf"
+    mode: "0644"
+    content: |
+      # Apache PHP-FPM Proxy Configurations for all PHP versions
+      # Generated by Ansible - do not edit directly
+      #
+      # Include in your Apache vhost config:
+      # Include /usr/local/etc/php-versions/php-apache-proxies.conf
+
+      {% for version_key, version_info in php_versions_all.items() %}
+      # PHP {{ version_info.label }}
+      <Proxy "unix:/var/run/php/php{{ version_key }}-fpm.sock|fcgi://phpfpm-{{ version_key }}">
+          ProxySet connectiontimeout=5 timeout=30
+      </Proxy>
+      {% endfor %}
+  when: server_type == "apache"
+
+- name: Create version-specific switcher shell configs
+  copy:
+    dest: "/usr/local/etc/php-versions/{{ item.key }}-{{ server_type }}.conf"
+    mode: "0644"
+    content: |
+      # Activate PHP {{ item.value.label }} in {{ server_type | upper }}
+      # Source this to set environment variables
+      export PHP_VERSION="{{ item.value.version }}.{{ item.value.patch }}"
+      export PHP_MAJOR="{{ item.key }}"
+      export PHP_LABEL="{{ item.value.label }}"
+      {% if server_type == 'ols' %}
+      export EXTPROCESSOR="lsphp{{ item.key }}"
+      {% elif server_type == 'nginx' %}
+      export UPSTREAM="phpfpm_{{ item.key }}"
+      {% elif server_type == 'apache' %}
+      export PROXY="phpfpm-{{ item.key }}"
+      {% endif %}
+  loop: "{{ php_versions_all | dict2items }}"

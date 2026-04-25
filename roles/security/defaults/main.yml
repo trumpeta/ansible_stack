@@ -1,0 +1,11 @@
+# Security defaults
+ufw_enabled: yes
+ufw_default_policy: deny
+
+# Ports to allow (SSH, HTTP, HTTPS)
+security_allowed_ports:
+  - 22
+  - 80
+  - 443
+
+fail2ban_enabled: yes

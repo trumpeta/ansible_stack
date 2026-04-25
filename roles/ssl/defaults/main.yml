@@ -1,0 +1,4 @@
+# SSL/Certbot defaults
+ssl_enabled: yes
+certbot_enabled: yes
+certbot_email_default: "admin@{{ domain }}"

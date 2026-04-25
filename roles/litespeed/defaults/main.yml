@@ -1,0 +1,4 @@
+# LiteSpeed defaults
+litespeed_enabled: "{{ server_type == 'ols' }}"
+litespeed_repo_list: /etc/apt/sources.list.d/lst_debian_repo.list
+litespeed_service_name: lshttpd

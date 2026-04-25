@@ -1,13 +1,11 @@
 - name: Install MariaDB server packages
   ansible.builtin.apt:
-    name:
-      - mariadb-server
-      - python3-pymysql
+    name: "{{ mariadb_packages }}"
     state: present
 
 - name: Ensure MariaDB is running
   ansible.builtin.systemd:
-    name: mariadb
+    name: "{{ mariadb_service_name }}"
     state: started
     enabled: yes
 
@@ -22,6 +20,15 @@
       GRANT ALL PRIVILEGES ON `{{ db_name }}`.* TO '{{ db_user }}'@'localhost';
       FLUSH PRIVILEGES;
 
-- name: Initialize application database and user
-  ansible.builtin.shell: mysql --protocol=socket --socket=/run/mysqld/mysqld.sock < /root/ansible_db_setup.sql
+- name: Check if database already exists
+  ansible.builtin.shell: >
+    mysql --protocol=socket --socket={{ mariadb_socket }}
+    -e "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='{{ db_name }}';"
+  register: db_check
+  changed_when: false
+  failed_when: false
+
+- name: Initialize application database and user (skip if exists)
+  ansible.builtin.shell: mysql --protocol=socket --socket={{ mariadb_socket }} < /root/ansible_db_setup.sql
+  when: db_check.stdout == ""
   changed_when: true

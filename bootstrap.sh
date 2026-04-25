@@ -51,7 +51,7 @@ fi
 
 cd ansible-stack
 
-echo "[7] Spoustim interaktivni deployment..."
+echo "[7] Spouštím interaktivní deployment..."
 
 ansible-playbook -i "${SERVER}," -u ${USER} interactive_full.yml
 

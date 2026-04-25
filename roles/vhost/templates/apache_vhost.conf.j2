@@ -4,11 +4,22 @@
 
     DocumentRoot /var/www/{{ domain }}/current
 
+    # PHP-FPM Proxy Configuration
+    # Active PHP Version: {{ php_versions_all[php_active].label }}
+    <FilesMatch \.php$>
+        SetHandler "proxy:unix:/var/run/php/php{{ php_active }}-fpm.sock|fcgi://localhost"
+    </FilesMatch>
+
     <Directory /var/www/{{ domain }}/current>
         AllowOverride All
         Require all granted
     </Directory>
 
     ErrorLog ${APACHE_LOG_DIR}/{{ domain }}_error.log
-    CustomLog ${APACHE_LOG_DIR}/{{ domain }}_access.log combined
+    CustomLog ${APACHE_LOG_DIR}/{{ domain }}_access_log combined
+
+    # Note: To switch PHP versions, change the socket path above
+    # from /var/run/php/php{{ php_active }}-fpm.sock
+    # to /var/run/php/php<new_version>-fpm.sock
+    # Or include /usr/local/etc/php-versions/php-apache-proxies.conf
 </VirtualHost>

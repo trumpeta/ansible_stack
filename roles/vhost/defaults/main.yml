@@ -1,0 +1,5 @@
+# Virtual host defaults
+vhost_webroot_base: /var/www
+vhost_webroot_owner: www-data
+vhost_webroot_group: www-data
+vhost_webroot_mode: "0750"

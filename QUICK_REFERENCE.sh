@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Quick reference for running the improved ansible_stack
+
+set -e
+
+echo "=== Ansible Stack Quick Start ==="
+echo ""
+echo "1. Bootstrap your local machine (first time only):"
+echo "   $ bash bootstrap.sh"
+echo ""
+echo "2. Or run playbook directly on existing server:"
+echo "   $ ansible-playbook -i inventory.ini interactive_full.yml --user root"
+echo ""
+echo "3. Run with custom inventory (single host):"
+echo "   $ ansible-playbook -i '<server_ip>,' interactive_full.yml --user root --ask-pass"
+echo ""
+echo "4. Dry-run (check mode) - see what would change:"
+echo "   $ ansible-playbook -i inventory.ini interactive_full.yml --user root --check"
+echo ""
+echo "5. Verbose output (troubleshooting):"
+echo "   $ ansible-playbook -i inventory.ini interactive_full.yml --user root -vv"
+echo ""
+echo "6. Lint the playbook before running:"
+echo "   $ ansible-lint interactive_full.yml"
+echo ""
+echo "=== Key Improvements ==="
+echo "✓ Idempotent: Safe to run multiple times"
+echo "✓ Smart database checks: Skips DB setup if already exists"
+echo "✓ Certificate detection: Prevents cert re-generation"
+echo "✓ Config file checks: Skips vhost creation if already present"
+echo "✓ Dynamic PHP versions: Configurable per deployment"
+echo "✓ Enhanced logging: ansible-lint for quality checks"
+echo ""
+echo "See IMPROVEMENTS.md for detailed documentation."

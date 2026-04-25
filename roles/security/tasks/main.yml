@@ -1,16 +1,16 @@
-- name: Enable UFW
+- name: Enable UFW firewall
   ufw:
     state: enabled
-    policy: deny
+    policy: "{{ ufw_default_policy }}"
 
-- name: Allow SSH/HTTP/HTTPS
+- name: Allow SSH/HTTP/HTTPS in UFW
   ufw:
     rule: allow
     port: "{{ item }}"
-  loop: [22, 80, 443]
+  loop: "{{ security_allowed_ports }}"
 
-- name: Enable fail2ban
+- name: Ensure fail2ban is enabled
   systemd:
-    name: fail2ban
+    name: "{{ 'fail2ban' }}"
     enabled: yes
     state: started

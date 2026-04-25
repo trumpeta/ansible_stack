@@ -1,0 +1,15 @@
+# Common defaults for all servers
+# Packages to install on every system
+common_packages:
+  - wget
+  - curl
+  - unzip
+  - git
+  - ufw
+  - fail2ban
+  - build-essential
+  - apt-transport-https
+  - ca-certificates
+
+# Update cache on startup
+apt_update_cache: yes
